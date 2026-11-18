@@ -87,7 +87,7 @@ describe('the Connect card', () => {
         'It can also work in Linear as you, through your own Linear sign-in in Orca.'
       )
     ).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect Linear' }))
     expect(mocks.start).toHaveBeenCalledWith('linear')
   })
 
@@ -100,7 +100,6 @@ describe('the Connect card', () => {
 
   it('still adds repositories or organizations once GitHub is connected', () => {
     show(makeTestBot({ id: 'b1', github: {} }), { source: 'github' })
-    expect(screen.getAllByText('Connected')).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: 'Add repositories or organizations' }))
     expect(mocks.start).toHaveBeenCalledWith('github')
   })

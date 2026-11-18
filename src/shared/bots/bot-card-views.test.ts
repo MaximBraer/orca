@@ -85,6 +85,7 @@ describe('bot create offer view', () => {
       createdBotId: null,
       title: 'Cutter',
       line: { kind: 'purpose', text: 'Tracks the release.' },
+      takeover: null,
       open: { note: 'takesOverMany {"count":2}', actions: 'editAndCreate' }
     })
     const taken = view([], [{ id: 'x', name: ' cutter ' }], 0)
@@ -98,6 +99,7 @@ describe('bot create offer view', () => {
       createdBotId: 'b1',
       title: 'Cutter 2',
       line: { kind: 'created', text: 'createdTookOverSome {"taken":1,"count":2}' },
+      takeover: 'tookOverSome {"taken":1,"count":2}',
       open: null
     })
     expect(view(accepted, bots, 0).line.text).toBe('createdAskedMany {"count":2}')

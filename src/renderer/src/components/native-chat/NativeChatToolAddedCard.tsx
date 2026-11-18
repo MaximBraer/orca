@@ -16,7 +16,12 @@ import {
   type BotToolAddedCardSay
 } from '../../../../shared/bots/bot-tool-added-card-view'
 import type { NativeChatMessage } from '../../../../shared/native-chat/native-chat-types'
-import { NativeChatCardAvatar, NativeChatCardFrame } from './NativeChatCardFrame'
+import {
+  NativeChatCardActions,
+  NativeChatCardAvatar,
+  NativeChatCardFrame,
+  NativeChatCardStatus
+} from './NativeChatCardFrame'
 import { NativeChatMessageTimestamp } from './messages/rows/NativeChatMessageTimestamp'
 
 type ToolAdded = NonNullable<NativeChatMessage['toolAdded']>
@@ -64,6 +69,7 @@ export function NativeChatToolAddedCard({
     signIn.line,
     say
   )
+  const subtitle = botToolSubtitle(tool)
   return (
     <NativeChatCardFrame
       avatar={
@@ -72,42 +78,49 @@ export function NativeChatToolAddedCard({
         </NativeChatCardAvatar>
       }
       heading={say('heading')}
+      status={
+        state ? (
+          <NativeChatCardStatus tone={present && signIn.face === 'signed-in' ? 'success' : 'muted'}>
+            {state}
+          </NativeChatCardStatus>
+        ) : null
+      }
       trailing={
         <NativeChatMessageTimestamp timestamp={timestamp} className="text-muted-foreground" />
       }
-    >
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-foreground">{botToolTitle(tool.name)}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {[botToolSubtitle(tool), state].filter(Boolean).join(' · ')}
-          </p>
-        </div>
-        {present ? (
-          <div className="flex shrink-0 items-center gap-1.5">
+      title={botToolTitle(tool.name)}
+      footer={
+        present ? (
+          <NativeChatCardActions
+            start={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => run(() => removeBotTool(bot, tool.name))}
+              >
+                {say('remove')}
+              </Button>
+            }
+          >
             {signIn.action ? (
               <Button
                 type="button"
-                variant="outline"
-                size="xs"
+                size="sm"
                 disabled={busy || signIn.action.busy}
                 onClick={signIn.action.run}
               >
                 {signIn.action.label}
               </Button>
             ) : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              disabled={busy}
-              onClick={() => run(() => removeBotTool(bot, tool.name))}
-            >
-              {say('remove')}
-            </Button>
-          </div>
-        ) : null}
-      </div>
+          </NativeChatCardActions>
+        ) : undefined
+      }
+    >
+      {subtitle ? (
+        <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{subtitle}</p>
+      ) : null}
       {present && signIn.pasteBack ? (
         <BotToolFinishSignIn bot={bot} name={tool.name} openAgain />
       ) : null}
