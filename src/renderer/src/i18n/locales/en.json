@@ -29005,8 +29005,7 @@
         "inHours_other": "In {{count}} hours"
       },
       "ask": {
-        "closed": "That question was already answered or replaced. What you typed is kept in the comment box.",
-        "unsupported": "This bot's computer runs an older Orca that can't take answers here. Reply with a comment instead.",
+        "closed": "That question closed before your answer went. Your answer is kept on the item.",
         "asks": "{{name}} asks",
         "asksAt": "{{name}} asks · {{time}}",
         "answeredInComment": "Answered in a comment",
