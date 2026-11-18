@@ -1,6 +1,6 @@
 // An item's Activity on a rail: comments as cards, and between them one muted line per event (worker
 // started and finished from the worker's record, edits, links and status changes).
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import {
   AlarmClock,
   AlarmClockOff,
@@ -27,6 +27,12 @@ import {
 import { botItemActorName } from '../../../../../shared/bots/bot-item-actor-name'
 import { botItemStatusName } from './bot-item-status-name'
 import { BotItemCommentCard } from './BotItemCommentCard'
+import {
+  BotItemAwaitingRow,
+  BotItemOrphanAnswer,
+  BotItemQuestionCard,
+  botItemQuestionContext
+} from './BotItemQuestionRow'
 import { BotItemStatusIcon } from './BotItemStatusIcon'
 import { formatBotItemSnoozeTime } from './BotItemSnooze'
 
@@ -201,7 +207,7 @@ function WorkerBody({
 function EntryIcon({
   entry
 }: {
-  entry: Exclude<BotItemActivityEntry, { kind: 'comment' }>
+  entry: Exclude<BotItemActivityEntry, { kind: 'comment' | 'answer' }>
 }): React.JSX.Element | null {
   if (entry.kind === 'worker') {
     if (entry.phase === 'started') {
@@ -238,31 +244,64 @@ export function BotItemActivityList({
   bot,
   item,
   events,
-  onReply
+  askShown
 }: {
   bot: Bot
   item: BotItem
   events: readonly BotItemEvent[]
-  /** The open question's Reply: focuses the comment box. */
-  onReply: () => void
+  /** The open question's card is below Activity, taking its answer. */
+  askShown: boolean
 }): React.JSX.Element {
   const t = useTranslate()
   const entries = botItemActivity(item, events)
+  const last = entries.at(-1)
   // The rail runs through the event glyphs; each glyph and card sits on the panel fill over it.
   return (
     <>
       <div className="relative flex flex-col before:absolute before:inset-y-2.5 before:left-[9.5px] before:w-px before:bg-foreground/12">
-        {entries.map((entry) =>
-          entry.kind === 'comment' ? (
-            <BotItemCommentCard
-              key={entry.key}
-              bot={bot}
-              item={item}
-              event={entry.event}
-              question={entry.question}
-              onReply={onReply}
-            />
-          ) : (
+        {entries.map((entry) => {
+          if (entry.kind === 'answer') {
+            return <BotItemOrphanAnswer key={entry.key} event={entry.event} />
+          }
+          if (entry.kind === 'comment' && entry.question !== null) {
+            const context = botItemQuestionContext(entry.event)
+            const carded = entry.question === 'open' && askShown
+            return (
+              <Fragment key={entry.key}>
+                {context ? (
+                  <BotItemCommentCard
+                    bot={bot}
+                    item={item}
+                    event={entry.event}
+                    textOverride={context}
+                  />
+                ) : null}
+                {/* The open card sits right under Activity; here only a line marks its place
+                    when later entries came after it. */}
+                {!carded ? (
+                  <BotItemQuestionCard
+                    item={item}
+                    event={entry.event}
+                    state={entry.question}
+                    answer={entry.answer}
+                  />
+                ) : entry === last ? null : (
+                  <div className="relative flex min-w-0 items-start gap-2">
+                    <span className="flex h-6 w-5 shrink-0 items-center justify-center bg-sidebar">
+                      <BotItemStatusIcon status="needs_you" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <BotItemAwaitingRow event={entry.event} />
+                    </div>
+                  </div>
+                )}
+              </Fragment>
+            )
+          }
+          if (entry.kind === 'comment') {
+            return <BotItemCommentCard key={entry.key} bot={bot} item={item} event={entry.event} />
+          }
+          return (
             <div
               key={entry.key}
               className="relative flex min-w-0 items-start gap-2 py-[3px] text-xs leading-[18px] text-muted-foreground"
@@ -270,7 +309,8 @@ export function BotItemActivityList({
               <span className="flex h-[18px] w-5 shrink-0 items-center justify-center bg-sidebar">
                 <EntryIcon entry={entry} />
               </span>
-              <div className="min-w-0 flex-1">
+              {/* Any long word (a path, a URL, a linked ref) wraps, so the page never scrolls sideways. */}
+              <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                 {entry.kind === 'worker' ? (
                   <WorkerBody entry={entry} />
                 ) : (
@@ -282,9 +322,9 @@ export function BotItemActivityList({
               </span>
             </div>
           )
-        )}
+        })}
       </div>
-      {entries.some((entry) => entry.kind === 'comment') ? null : (
+      {entries.some((entry) => entry.kind !== 'worker' && entry.kind !== 'event') ? null : (
         <p className="pt-0.5 text-xs leading-[18px] text-muted-foreground">
           {t('bots.items.activity.noComments', 'No comments yet.')}
         </p>

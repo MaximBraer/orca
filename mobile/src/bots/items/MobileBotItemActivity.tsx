@@ -33,6 +33,7 @@ import { MobileMarkdown } from '../../components/markdown/MobileMarkdown'
 import { formatPhoneSnoozeTime } from './bot-item-snooze-time'
 import { getUiIntlLocale } from '../../i18n/ui-intl-locale'
 import { useMobileTranslation } from '../../i18n/use-mobile-translation'
+import { mobileBotItemAnsweredLine } from './mobile-bot-item-answered-line'
 import type { Translate } from '../../i18n/mobile-i18n'
 import { colors, radii, spacing, typography } from '../../theme/mobile-theme'
 import { themedStyleSheet } from '../../theme/themed-styles'
@@ -216,7 +217,9 @@ function WorkerLine({ entry }: { entry: Extract<BotItemActivityEntry, { kind: 'w
   )
 }
 
-function EntryIcon({ entry }: { entry: Exclude<BotItemActivityEntry, { kind: 'comment' }> }) {
+type LineEntry = Exclude<BotItemActivityEntry, { kind: 'comment' | 'answer' }>
+
+function EntryIcon({ entry }: { entry: LineEntry }) {
   if (entry.kind === 'worker') {
     if (entry.phase === 'started') {
       return <Play size={ICON} color={colors.textMuted} />
@@ -252,11 +255,14 @@ function CommentCard({
   item,
   event,
   question,
+  answer,
   onReply
 }: {
   item: BotItem
   event: BotItemEvent
   question: BotItemQuestionState | null
+  /** The recorded answer that closed this question; its own card is not shown again. */
+  answer?: BotItemEvent
   onReply: () => void
 }) {
   const t = useMobileTranslation()
@@ -296,6 +302,7 @@ function CommentCard({
         <Text style={styles.meta}>{timeOf(event.at)}</Text>
       </View>
       <MobileMarkdown content={text} />
+      {answer ? <Text style={styles.meta}>{mobileBotItemAnsweredLine(t, answer)}</Text> : null}
     </View>
   )
 }
@@ -315,12 +322,13 @@ export function MobileBotItemActivity({
   return (
     <View>
       {entries.map((entry) =>
-        entry.kind === 'comment' ? (
+        entry.kind === 'comment' || entry.kind === 'answer' ? (
           <CommentCard
             key={entry.key}
             item={item}
             event={entry.event}
-            question={entry.question}
+            question={entry.kind === 'comment' ? entry.question : null}
+            answer={entry.kind === 'comment' ? entry.answer : undefined}
             onReply={onReply}
           />
         ) : (

@@ -1599,6 +1599,10 @@
       "activity": {
         "you": "You"
       },
+      "ask": {
+        "closed": "That question was already answered or replaced. What you typed is kept in the comment box.",
+        "unsupported": "This bot's computer runs an older Orca that can't take answers here. Reply with a comment instead."
+      },
       "pill": {
         "moveCount_one": "Move {{count}} item to",
         "moveCount_other": "Move {{count}} items to"

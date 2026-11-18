@@ -1,7 +1,6 @@
 // A comment in an item's Activity: a card with its author's avatar, name and time, and the text as
-// Markdown. The bot's open question stays outlined with Waiting on you until it is answered.
+// Markdown. An agent's Needs you question is not drawn here: its row and card are chat's question's.
 import { useContext } from 'react'
-import { Check, CornerDownRight } from 'lucide-react'
 import { useTranslate } from '@/i18n/use-translate'
 import { uiDateTimeFormat } from '@/i18n/ui-intl-formatters'
 import { cn } from '@/lib/class-names'
@@ -19,9 +18,6 @@ import { botInitial } from '../../../../../shared/bots/bot-avatar-fallback'
 import { BotAvatar, BotAvatarTile } from '../BotAvatar'
 import { BotOwnerAvatar } from '../bot-connector-people'
 import { BotItemClampedText } from './BotItemClampedText'
-import { BotItemMarkdown } from './BotItemMarkdown'
-import { BotItemStatusIcon } from './BotItemStatusIcon'
-import type { BotItemQuestionState } from '../../../../../shared/bots/bot-item-activity'
 import { botItemActorName } from '../../../../../shared/bots/bot-item-actor-name'
 
 const TIME = { hour: 'numeric', minute: '2-digit' } as const
@@ -55,14 +51,13 @@ export function BotItemCommentCard({
   bot,
   item,
   event,
-  question,
-  onReply
+  textOverride
 }: {
   bot: Bot
   item: BotItem
   event: BotItemEvent
-  question: BotItemQuestionState | null
-  onReply: () => void
+  /** Words to show instead of the event's text (a question's context, without its decisions). */
+  textOverride?: string
 }): React.JSX.Element {
   const t = useTranslate()
   const runtimeContext = useContext(NativeChatMarkdownImageOwnerContext)?.runtimeContext ?? null
@@ -70,15 +65,10 @@ export function BotItemCommentCard({
   const images = botItemCommentImages(event.data)
   // Its images show above the words, so the [Image #N] its send wrote go, as in chat's sent messages.
   const text = stripSentImagePromptMarkers(
-    typeof event.data.text === 'string' ? event.data.text : '',
+    textOverride ?? (typeof event.data.text === 'string' ? event.data.text : ''),
     images.length
   )
   const name = botItemActorName(event, item, t)
-  const time = (
-    <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-      {uiDateTimeFormat(TIME).format(event.at)}
-    </span>
-  )
   return (
     // Opaque under the card's tint so the Activity rail never shows through.
     <div className="relative my-2 rounded-[10px] bg-sidebar">
@@ -86,44 +76,14 @@ export function BotItemCommentCard({
         data-bot-item-comment={mine ? 'mine' : 'bot'}
         className={cn(
           'rounded-[10px] border px-3 pb-2.5 pt-2',
-          mine ? 'border-chat-user-border bg-chat-user-surface' : 'border-border bg-foreground/3',
-          question === 'open' && 'border-foreground/25'
+          mine ? 'border-chat-user-border bg-chat-user-surface' : 'border-border bg-foreground/3'
         )}
       >
-        {question === 'open' ? (
-          <div className="mb-2 flex items-center gap-2 border-b border-border pb-2">
-            <span className="flex items-center gap-1.5 text-2xs font-medium text-foreground">
-              <BotItemStatusIcon status="needs_you" />
-              {t('bots.items.activity.waitingOnYou', 'Waiting on you')}
-            </span>
-            <button
-              type="button"
-              className="ml-auto flex items-center gap-1 text-xs font-medium text-foreground hover:underline"
-              onClick={onReply}
-            >
-              <CornerDownRight className="size-3" />
-              {t('bots.items.activity.reply', 'Reply')}
-            </button>
-          </div>
-        ) : null}
         <div className="mb-1.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <Avatar bot={bot} event={event} name={name} />
           <b className="shrink-0 text-[13px] font-medium text-foreground">{name}</b>
-          {question ? (
-            <span className="min-w-0 truncate">
-              {question === 'open'
-                ? t('bots.items.activity.asksYou', 'asks you')
-                : t('bots.items.activity.askedYou', 'asked you')}
-            </span>
-          ) : null}
-          <span className="ml-auto flex shrink-0 items-center gap-2">
-            {question === 'answered' ? (
-              <span className="flex items-center gap-1 text-2xs">
-                <Check className="size-3" />
-                {t('bots.items.activity.answered', 'Answered')}
-              </span>
-            ) : null}
-            {time}
+          <span className="ml-auto shrink-0 text-2xs tabular-nums text-muted-foreground">
+            {uiDateTimeFormat(TIME).format(event.at)}
           </span>
         </div>
         <BotItemCommentImages images={images} />
@@ -133,9 +93,7 @@ export function BotItemCommentCard({
           structured
           runtimeContext={runtimeContext}
           renderText={(shown) =>
-            !shown.trim() ? null : question === 'open' ? (
-              <BotItemMarkdown text={shown} />
-            ) : (
+            !shown.trim() ? null : (
               // 12 lines of 19 px.
               <BotItemClampedText text={shown} clampClassName="max-h-[228px]" fade />
             )

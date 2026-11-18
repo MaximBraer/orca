@@ -1,12 +1,21 @@
 // The owner's writes from the panel (desktop or phone): comments, which move a Needs you item to In
-// progress, and any status on any number of items, each owing the item's chat a mail; and snoozes, which
-// mail nobody. A comment or status move brings a snoozed item back.
+// progress, answers to its open question, and any status on any number of items, each owing the item's
+// chat a mail; and snoozes, which mail nobody. A comment or status move brings a snoozed item back.
 import {
+  botItemEventId,
   isOpenBotItemStatus,
   type BotItemCommentImage,
   type BotItemStatus
 } from '../../shared/bots/bot-items'
 import { BOT_ITEM_SNOOZE_MAX_MS } from '../../shared/bots/bot-item-snooze'
+import {
+  BOT_ITEM_ASK_LIMITS,
+  botItemAnswerProblem,
+  botItemAnswerText,
+  botItemAskOf,
+  normalizeBotItemAnswers,
+  type BotItemAnswer
+} from '../../shared/bots/bot-item-ask'
 import { BotItemError } from './bot-item-error'
 import { BotItemsWrites } from './bot-items-writes'
 import {
@@ -18,6 +27,7 @@ import { eventRecordOf } from './bot-items-rows'
 import type { BotItemMail, BotItemRecord } from './bot-items-schema'
 
 const OWED_MAIL_PAGE = 50
+const ANSWER_SCAN_PAGE = 200
 
 export type BotItemOwnerStatusInput = {
   uids: readonly string[]
@@ -71,6 +81,83 @@ export class BotItemsOwner extends BotItemsWrites {
   ): number {
     const data = { text: commentText, ...(images.length > 0 ? { images } : {}) }
     return this.appendEvent(item.uid, 'commented', actor, data, true, now)
+  }
+
+  /** The owner's answer to the item's open question, in one transaction: the answer comment (naming the
+   *  question, its answers and the sender's `answerId`), the item row's move to In progress and its
+   *  status event, all one action, so the agent gets one mail for both. Only the open question takes an
+   *  answer, so the first from any device wins. The same `answerId` again (a retry after a lost reply,
+   *  or a double submit) gets the first write back, `unchanged`, and writes nothing; any other answer
+   *  to a question no longer open is refused, and the caller keeps its words. */
+  ownerAnswer(
+    uid: string,
+    questionEventId: number,
+    answers: readonly BotItemAnswer[],
+    answerId: string,
+    actor: BotItemOwnerActor,
+    now = Date.now()
+  ): BotItemWriteOutcome {
+    const given = normalizeBotItemAnswers(answers)
+    return this.transaction(() => {
+      const item = this.requireItem(uid)
+      const replay = this.answerWithId(uid, questionEventId, answerId)
+      if (replay !== null) {
+        return { uid, eventId: replay, unchanged: true }
+      }
+      if (item.status !== 'needs_you' || item.questionEvent !== questionEventId) {
+        throw new BotItemError(
+          'question_closed',
+          'That question is no longer open: it was answered, replaced, or the item moved on.'
+        )
+      }
+      const [question] = this.events(uid, questionEventId - 1, 1)
+      if (question?.id !== questionEventId || question.actor.kind !== 'bot') {
+        throw new BotItemError('invalid_argument', "Only a bot's open question takes an answer.")
+      }
+      const ask = botItemAskOf(question.data)
+      const problem = botItemAnswerProblem(ask, given)
+      if (problem) {
+        throw new BotItemError('invalid_argument', problem)
+      }
+      const asked = typeof question.data.text === 'string' ? question.data.text : ''
+      const data = {
+        text: botItemAnswerText(ask, given),
+        answers: given,
+        answersEvent: botItemEventId(questionEventId),
+        answerId,
+        // A prose question's words, so its receipt still says what was asked when the question is
+        // off the loaded page; an ask's decisions are already in `text`.
+        ...(ask ? {} : { asked: asked.slice(0, BOT_ITEM_ASK_LIMITS.prompt * 4) })
+      }
+      const eventId = this.appendEvent(uid, 'commented', actor, data, true, now)
+      this.endSnooze(uid, actor, now)
+      this.writeStatus(uid, 'working', null, actor, now)
+      this.appendEvent(uid, 'status', actor, { from: 'needs_you', to: 'working' }, true, now)
+      return { uid, eventId }
+    })
+  }
+
+  /** The answer this `answerId` already wrote to the question, if any. Answers come after their
+   *  question, so the scan starts there and pages forward; an item's events after one question are few. */
+  private answerWithId(uid: string, questionEventId: number, answerId: string): number | null {
+    const answersEvent = botItemEventId(questionEventId)
+    let after = questionEventId
+    for (;;) {
+      const page = this.events(uid, after, ANSWER_SCAN_PAGE)
+      const hit = page.find(
+        (event) =>
+          event.kind === 'commented' &&
+          event.data.answersEvent === answersEvent &&
+          event.data.answerId === answerId
+      )
+      if (hit) {
+        return hit.id
+      }
+      if (page.length < ANSWER_SCAN_PAGE) {
+        return null
+      }
+      after = page.at(-1)!.id
+    }
   }
 
   /** One status for every item named, each its own event, in one transaction. */

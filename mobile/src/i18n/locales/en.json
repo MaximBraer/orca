@@ -5407,7 +5407,6 @@
       },
       "comment": {
         "offline": "{{host}} is offline. Your comment is kept; Comment works again when it’s back.",
-        "answering": "Answering:",
         "label": "Comment",
         "add": "Add a comment…",
         "submit": "Comment"
@@ -5529,6 +5528,9 @@
         "pickTitle": "Snooze until",
         "pickDay": "Snooze until which day?",
         "pickHour": "At what time?"
+      },
+      "ask": {
+        "youAnswered": "You answered:"
       }
     },
     "needs": {

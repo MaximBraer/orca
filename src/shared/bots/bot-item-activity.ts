@@ -5,8 +5,9 @@ import type { BotItem, BotItemEvent, BotItemLinkView } from './bot-items'
 
 type DispatchLink = Extract<BotItemLinkView, { kind: 'dispatch' }>
 
-/** Open: the item's current question. Answered: the owner commented before the bot asked again.
- *  Asked: an earlier question nobody replied to (asked again, or the item moved on). */
+/** Open: the item's current question. Answered: a recorded answer names it, or, for a question asked
+ *  before hosts recorded answers, the owner commented before the agent asked again. Asked: a question
+ *  that closed with no answer (asked again, or the item moved on). */
 export type BotItemQuestionState = 'open' | 'answered' | 'asked'
 
 export type BotItemActivityEntry =
@@ -17,8 +18,23 @@ export type BotItemActivityEntry =
       at: number
       event: BotItemEvent
       question: BotItemQuestionState | null
+      /** The recorded answer that closed this question, shown with it rather than on its own. */
+      answer?: BotItemEvent
     }
+  /** A recorded answer whose question is not in the loaded page: its own text says what it answered. */
+  | { kind: 'answer'; key: string; at: number; event: BotItemEvent }
   | { kind: 'worker'; key: string; at: number; phase: 'started' | 'finished'; link: DispatchLink }
+
+/** The question a recorded answer names, or null for any other event. Only an owner's comment with a
+ *  valid link is an answer; a plain comment never is. */
+export function botItemAnsweredQuestion(event: BotItemEvent): string | null {
+  return event.kind === 'commented' &&
+    event.actor.kind === 'owner' &&
+    typeof event.data.answersEvent === 'string' &&
+    Array.isArray(event.data.answers)
+    ? event.data.answersEvent
+    : null
+}
 
 function linksOnlyWorkers(event: BotItemEvent): boolean {
   const links = Array.isArray(event.data.links) ? event.data.links : []
@@ -36,17 +52,89 @@ function asksWith(comment?: BotItemEvent, status?: BotItemEvent): boolean {
   )
 }
 
-/** Whether the owner commented after the question at `index`, before the bot asked again. */
-function ownerRepliedTo(events: readonly BotItemEvent[], index: number): boolean {
-  for (const later of events.slice(index + 2)) {
-    if (later.kind === 'commented' && later.actor.kind === 'owner') {
-      return true
-    }
-    if (later.kind === 'status' && later.data.to === 'needs_you') {
-      return false
+/** A snooze ending (or starting) is written between a comment and the move it came with, so pairing
+ *  reads past it. */
+function isSnoozeMark(event: BotItemEvent): boolean {
+  return event.kind === 'snoozed' || event.kind === 'unsnoozed'
+}
+
+function isAsk(event: BotItemEvent): boolean {
+  return event.kind === 'status' && event.data.to === 'needs_you'
+}
+
+/** The owner's comment and their move from Needs you to In progress, written together: a reply that
+ *  handed the item back. */
+function isOwnerReplyMove(comment: BotItemEvent, move: BotItemEvent | undefined): boolean {
+  return (
+    comment.kind === 'commented' &&
+    comment.actor.kind === 'owner' &&
+    botItemAnsweredQuestion(comment) === null &&
+    move?.kind === 'status' &&
+    move.actor.kind === 'owner' &&
+    move.data.from === 'needs_you' &&
+    move.data.to === 'working' &&
+    move.at === comment.at
+  )
+}
+
+/** The owner's move to In progress written with an answer: the receipt already says it. */
+function movedWithAnswer(previous: BotItemEvent | undefined, event: BotItemEvent): boolean {
+  return (
+    previous !== undefined &&
+    botItemAnsweredQuestion(previous) !== null &&
+    event.kind === 'status' &&
+    event.actor.kind === 'owner' &&
+    event.at === previous.at
+  )
+}
+
+/** What happened from each event up to the next Needs you move (the agent asking again ends a question's
+ *  window): whether the owner commented, and whether an owner reply handed the item back. One backward
+ *  pass over the events with snooze marks set aside, so it stays linear however many questions. */
+function questionWindows(events: readonly BotItemEvent[]): {
+  prev: (index: number) => BotItemEvent | undefined
+  next: (index: number) => BotItemEvent | undefined
+  window: (index: number) => { ownerCommented: boolean; ownerReplied: boolean }
+} {
+  const kept: number[] = []
+  const place = Array.from({ length: events.length }, () => -1)
+  for (let index = 0; index < events.length; index += 1) {
+    if (!isSnoozeMark(events[index]!)) {
+      place[index] = kept.length
+      kept.push(index)
     }
   }
-  return false
+  const at = (k: number): BotItemEvent | undefined =>
+    k >= 0 && k < kept.length ? events[kept[k]!] : undefined
+  // Per kept event: the window that starts right after it.
+  const commentedAfter = Array.from({ length: kept.length }, () => false)
+  const repliedAfter = Array.from({ length: kept.length }, () => false)
+  let commented = false
+  let replied = false
+  for (let k = kept.length - 1; k >= 0; k -= 1) {
+    commentedAfter[k] = commented
+    repliedAfter[k] = replied
+    const event = at(k)!
+    if (isAsk(event)) {
+      commented = false
+      replied = false
+      continue
+    }
+    if (event.kind === 'commented' && event.actor.kind === 'owner') {
+      commented = true
+      replied ||= isOwnerReplyMove(event, at(k + 1))
+    }
+  }
+  return {
+    prev: (index) => at(place[index]! - 1),
+    next: (index) => at(place[index]! + 1),
+    // A question's window starts after its own Needs you move when that move is next to it.
+    window: (index) => {
+      const k = place[index]!
+      const from = at(k + 1) && isAsk(at(k + 1)!) ? k + 1 : k
+      return { ownerCommented: commentedAfter[from]!, ownerReplied: repliedAfter[from]! }
+    }
+  }
 }
 
 function eventEntries(
@@ -54,26 +142,61 @@ function eventEntries(
   events: readonly BotItemEvent[]
 ): BotItemActivityEntry[] {
   const entries: BotItemActivityEntry[] = []
+  const loaded = new Set(events.map((event) => event.id))
+  const answers = new Map<string, BotItemEvent>()
+  for (const event of events) {
+    const question = botItemAnsweredQuestion(event)
+    // The first answer is the one that took the question.
+    if (question !== null && !answers.has(question)) {
+      answers.set(question, event)
+    }
+  }
+  const { prev, next, window } = questionWindows(events)
   events.forEach((event, index) => {
     if (event.kind === 'linked' && linksOnlyWorkers(event)) {
       return
     }
-    if (asksWith(events[index - 1], event)) {
+    if (
+      !isSnoozeMark(event) &&
+      (asksWith(prev(index), event) || movedWithAnswer(prev(index), event))
+    ) {
+      return
+    }
+    const answered = botItemAnsweredQuestion(event)
+    if (answered !== null) {
+      if (!loaded.has(answered)) {
+        entries.push({ kind: 'answer', key: event.id, at: event.at, event })
+      }
       return
     }
     if (event.kind !== 'commented') {
       entries.push({ kind: 'event', key: event.id, at: event.at, event })
       return
     }
+    const answer = answers.get(event.id)
+    // A marked question, or one an answer names, is a question whatever its status move carried (a
+    // note included): a recorded answer or the owner's reply closed it, else it went unanswered. An
+    // unmarked one is known by sitting with its Needs you move, and any owner comment after it counts.
     const question =
       event.id === item.question?.eventId
         ? 'open'
-        : asksWith(event, events[index + 1])
-          ? ownerRepliedTo(events, index)
+        : event.data.answerable === true || answer
+          ? answer || window(index).ownerReplied
             ? 'answered'
             : 'asked'
-          : null
-    entries.push({ kind: 'comment', key: event.id, at: event.at, event, question })
+          : asksWith(event, next(index))
+            ? window(index).ownerCommented
+              ? 'answered'
+              : 'asked'
+            : null
+    entries.push({
+      kind: 'comment',
+      key: event.id,
+      at: event.at,
+      event,
+      question,
+      ...(answer && question === 'answered' ? { answer } : {})
+    })
   })
   return entries
 }

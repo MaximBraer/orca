@@ -1,5 +1,6 @@
 import * as z from 'zod'
 import { BOT_ITEM_STATUSES } from '../bots/bot-items'
+import { BotItemAnswersSchema, BotItemAskSchema } from '../bots/bot-item-ask'
 import { AGENT_SESSION_MESSAGE_IMAGE_MAX_COUNT } from '../agent-session/agent-session-attachments'
 import {
   OptionalBoolean,
@@ -38,8 +39,10 @@ export const BotItemsSet = z.object({
   note: OptionalString,
   /** With `--status canceled`, which needs it. */
   reason: OptionalString,
-  /** With any `--status`, written as a comment; with needs-you, the question for the owner. */
-  comment: OptionalString
+  /** With any `--status`, written as a comment; with needs-you, the question. With `ask`, the readable text a host without asks keeps instead. */
+  comment: OptionalString,
+  /** With needs-you (`--ask/--option`): the decisions, their choices and their context (`--comment`). */
+  ask: BotItemAskSchema.optional()
 })
 
 export const BotItemsComment = z.object({
@@ -112,9 +115,26 @@ export const BotItemsOwnerComment = z
     images: z
       .array(z.string().min(1).max(4096))
       .max(AGENT_SESSION_MESSAGE_IMAGE_MAX_COUNT, 'Comments take up to 20 images.')
-      .optional()
+      .optional(),
+    /** The open question this answers (its event id), with `answers` one per decision and the sender's
+     *  `answerId`, the same on every retry: the host writes the answer and moves the item to In
+     *  progress in one write and replies `answered: true`. An answer sends empty `text` (the host
+     *  spells it out), so a host that predates answers refuses it as "Missing text" instead of keeping
+     *  a plain comment that would read as answered. */
+    answering: OptionalString,
+    answers: BotItemAnswersSchema.optional(),
+    answerId: OptionalString
   })
-  .refine((value) => value.text.trim() || value.images?.length, 'Missing text')
+  .refine(
+    (value) => value.text.trim() || value.images?.length || value.answering !== undefined,
+    'Missing text'
+  )
+  .refine(
+    (value) =>
+      (value.answering === undefined) === (value.answers === undefined) &&
+      (value.answering === undefined) === (value.answerId === undefined),
+    { message: 'An answer names its question, its answers and its answer id.' }
+  )
 
 /** One status for one or many items; Cancel needs a reason, Needs you may carry a comment. */
 export const BotItemsOwnerStatus = z.object({

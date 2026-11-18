@@ -88,8 +88,6 @@ export const posted = defineFixture({
     <BotItemCommentCard
       bot={fixtureCos}
       item={item}
-      question={null}
-      onReply={() => {}}
       event={{
         id: 'e1',
         kind: 'commented',
