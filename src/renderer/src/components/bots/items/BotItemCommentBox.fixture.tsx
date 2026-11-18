@@ -1,7 +1,8 @@
-import { defineFixture } from '../../../component-fixtures/component-fixture'
+import { defineFixture, type ComponentFixture } from '../../../component-fixtures/component-fixture'
 import { fixtureCos } from '../../../component-fixtures/fixture-bot-panel'
 import { makeFolderWorkspace } from '@/store/folder-workspaces/folder-workspace.test-fixture'
 import { makeTestBotItem } from '../../../../../shared/bots/bot-item.test-fixture'
+import type { BotItem } from '../../../../../shared/bots/bot-items'
 import { folderWorkspaceKey } from '../../../../../shared/workspace/identity/workspace-scope'
 import { botRefKey } from '@/lib/bot-hosts'
 import { updateNativeChatComposerDraft } from '../../native-chat/drafts/native-chat-composer-draft-store'
@@ -80,6 +81,70 @@ export const oneLine = defineFixture({
     )
   },
   render: pastedImage.render
+})
+
+const question = makeTestBotItem(8, {
+  title: 'Pick the share defaults',
+  question: {
+    eventId: 'q1',
+    text: 'Three choices before building: link expiry, who can reshare, and whether guests see history'
+  }
+})
+
+function commentBox(
+  target: BotItem,
+  text: string
+): Pick<ComponentFixture, 'store' | 'setup' | 'render'> {
+  return {
+    store: pastedImage.store,
+    // Each theme's shot starts from the same draft.
+    setup: () =>
+      updateNativeChatComposerDraft(
+        `bot-item-comment:${botRefKey(fixtureCos)}:${target.uid}`,
+        { text, images: [] },
+        'immediate'
+      ),
+    render: () => (
+      <BotItemCommentBox
+        bot={fixtureCos}
+        item={target}
+        attachTo={{
+          worktreeId: folderWorkspaceKey(fixtureCos.folderWorkspaceId),
+          runtimeEnvironmentId: null
+        }}
+        onSend={() => {}}
+      />
+    )
+  }
+}
+
+/** Empty: four lines of room above the + / mic / send row. */
+export const empty = defineFixture({ width: 380, ...commentBox(item, '') })
+
+/** Answering the bot's open question, nothing typed yet. */
+export const answeringEmpty = defineFixture({
+  width: 380,
+  ...commentBox(question, '')
+})
+
+const LONG_ANSWER = [
+  'Link expiry: 7 days by default, with a picker for 1 day, 30 days and never. Owners can change it after sharing.',
+  'Resharing: only editors can reshare. Viewers see the link but the share button is disabled with a short reason.',
+  'Guest history: guests see the current version only. Version history stays for signed-in members of the workspace.',
+  'Rollout: ship behind the existing sharing flag, turn it on for our own workspace first, then everyone after a week if nothing breaks.',
+  'Open question back to you: should expired links show a "request access" page or a plain 404?'
+].join('\n\n')
+
+/** A long multi-part answer: the box grows to its cap, then the text scrolls inside it. */
+export const answeringLong = defineFixture({
+  width: 380,
+  ...commentBox(question, LONG_ANSWER)
+})
+
+/** The narrowest right sidebar. */
+export const answeringNarrow = defineFixture({
+  width: 220,
+  ...commentBox(question, '')
 })
 
 /** That comment posted: its image above the words, without the [Image #1] its send wrote, as chat shows a sent message. */
