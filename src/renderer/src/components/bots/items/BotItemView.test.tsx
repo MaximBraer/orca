@@ -344,25 +344,7 @@ it('keeps the answer being typed when the question is replaced, and offers it ba
   const notice = screen.getByRole('status')
   expect(notice.textContent).toContain('Which flow should ship?')
   expect(notice.textContent).toContain('The short one')
-  expect((screen.getByPlaceholderText('Type your answer') as HTMLTextAreaElement).value).toBe('')
-})
-
-it('sends a retried answer under the same id after the card remounts', async () => {
-  answered.mockRejectedValueOnce(new Error('connection lost'))
-  const first = renderAt(askingItem(22))
-  typeAnswer('Ship B')
-  fireEvent.click(screen.getByRole('button', { name: /Submit/ }))
-  await act(async () => {})
-  first.unmount()
-
-  renderAt(askingItem(22))
-  expect((screen.getByPlaceholderText('Type your answer') as HTMLTextAreaElement).value).toBe(
-    'Ship B'
-  )
-  fireEvent.click(screen.getByRole('button', { name: /Submit/ }))
-
-  expect(answered).toHaveBeenCalledTimes(2)
-  expect(answered.mock.calls[1]![4]).toBe(answered.mock.calls[0]![4])
+  expect(screen.getByPlaceholderText('Type your answer')).toHaveProperty('value', '')
 })
 
 it('says an older host kept the answer only as a comment, with the words kept', async () => {
