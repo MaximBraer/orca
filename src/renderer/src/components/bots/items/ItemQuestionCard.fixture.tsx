@@ -41,7 +41,12 @@ const ask: BotItemAsk = {
   ]
 }
 const prompt = ask.questions[0]!.prompt
-const question = { eventId: 'e2', text: prompt, answerable: true, ask }
+const question: NonNullable<BotItem['question']> = {
+  eventId: 'e2',
+  text: prompt,
+  answerable: true,
+  ask
+}
 const open = makeTestBotItem(21, {
   owner: { botId: agent.id, name: agent.name },
   title: 'Review the sample preview',
@@ -103,7 +108,7 @@ const longText = [
   '',
   'What would you like to review next?'
 ].join('\n')
-const longItem = { ...open, question: { eventId: 'e2', text: longText, answerable: true } }
+const longItem: BotItem = { ...open, question: { eventId: 'e2', text: longText, answerable: true } }
 export const longAsk = defineFixture({
   width: 380,
   setup,
@@ -138,7 +143,7 @@ export const olderAsks = defineFixture({
   )
 })
 
-const answeredItem = { ...open, status: 'working' as const, question: null }
+const answeredItem: BotItem = { ...open, status: 'working', question: null }
 const answeredEvents: BotItemEvent[] = [
   ...events,
   {
