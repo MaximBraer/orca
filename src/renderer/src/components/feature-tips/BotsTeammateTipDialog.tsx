@@ -6,11 +6,7 @@ import { cn } from '@/lib/class-names'
 import { BotsFleetStoryVisual } from './BotsFleetStoryVisual'
 import { fleetStoryFrame } from './bots-fleet-story-timeline'
 import { FeatureTipActions } from './FeatureTipActions'
-import {
-  FEATURE_TIP_BUTTONS_ON_CARD_EDGE,
-  FeatureTipDialogFrame,
-  FeatureTipEyebrow
-} from './FeatureTipDialogFrame'
+import { FEATURE_TIP_BUTTONS_ON_CARD_EDGE, FeatureTipDialogFrame } from './FeatureTipDialogFrame'
 import { useBotsFleetStoryPlayback } from './use-bots-fleet-story-playback'
 
 export function BotsTeammateTipDialog({
@@ -51,7 +47,6 @@ export function BotsTeammateTipDialog({
     >
       <DialogHeader className="text-left">
         <div>
-          <FeatureTipEyebrow label={t('featureTips.eyebrowNew', 'New')} />
           <DialogTitle size="display">
             {t('featureTips.botsTeammate.title', 'Meet your AI teammate')}
           </DialogTitle>
