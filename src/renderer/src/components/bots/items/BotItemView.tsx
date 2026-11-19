@@ -184,7 +184,8 @@ export function BotItemBody({
       {/* Pasted-text and file pills open their preview from the bot's host; files drop anywhere here. */}
       <NativeChatMarkdownImageOwnerContext value={imageOwner}>
         <NativeChatTextAttachmentScope enabled>
-          <NativeChatPaneFileDropSurface className="flex min-h-0 flex-1 flex-col">
+          {/* A size container: the comment box caps its height to a share of this pane's (`cqh`). */}
+          <NativeChatPaneFileDropSurface className="flex min-h-0 flex-1 flex-col [container-type:size]">
             <NativeChatFileLinkExistenceContext value={fileContext?.existence ?? null}>
               <NativeChatLinkClickContext value={links.onLinkClick}>
                 <div className="relative flex min-h-0 flex-1 flex-col">
